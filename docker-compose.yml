@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  broker:
+    build: .
+    command: python src/broker/broker_central.py
+    ports:
+      - "5555:5555"
+      - "5556:5556"
+
+  client1:
+    build: .
+    command: python src/client/client_text.py user1 SALA_A
+    depends_on:
+      - broker
+
+  client2:
+    build: .
+    command: python src/client/client_text.py user2 SALA_A
+    depends_on:
+      - broker
