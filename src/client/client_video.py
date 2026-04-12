@@ -6,6 +6,7 @@ import queue
 import threading
 import uuid
 from dataclasses import dataclass
+import sys
 
 
 # =========================
@@ -135,24 +136,22 @@ class VideoClient:
             ])
 
     def receive_loop(self):
+            while self.running:
+                try:
+                    topic, sender, msg_id, timestamp, payload = \
+                        self.video_sub.recv_multipart(flags=zmq.NOBLOCK)
 
-        while self.running:
-            try:
-                topic, sender, msg_id, timestamp, payload = \
-                self.video_sub.recv_multipart(flags=zmq.NOBLOCK)
-                sender = sender.decode()
+                    sender = sender.decode()
 
-                # não renderiza o próprio vídeo recebido do broker
-                if sender == self.config.user_id:
-                    continue
+                    np_buffer = np.frombuffer(payload, dtype=np.uint8)
+                    frame = cv2.imdecode(np_buffer, cv2.IMREAD_COLOR)
 
-                np_buffer = np.frombuffer(payload, dtype=np.uint8)
-                frame = cv2.imdecode(np_buffer, cv2.IMREAD_COLOR)
-                if frame is not None:
-                    self.remote_frames[sender] = frame
+                    # só salva se conseguiu decodificar
+                    if frame is not None:
+                        self.remote_frames[sender] = frame
 
-            except zmq.Again:
-                time.sleep(0.01)
+                except zmq.Again:
+                    time.sleep(0.01)
 
     def render_loop(self):
         while self.running:
@@ -167,11 +166,27 @@ class VideoClient:
 
 
 if __name__ == "__main__":
+    if len(sys.argv) < 3:
+        print("Uso: python client_video.py <user_id> <room>")
+        sys.exit(1)
+
+    user_id = sys.argv[1]
+    room = sys.argv[2]
+
     config = ClientConfig(
-        user_id="",
-        room="",
-        broker_host=""
+        user_id=user_id,
+        room=room,
+        broker_host="localhost"
     )
+
+    client = VideoClient(config)
+
+    try:
+        client.start()
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        client.stop()
 
     client = VideoClient(config)
 
