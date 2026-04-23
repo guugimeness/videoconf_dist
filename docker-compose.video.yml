@@ -1,0 +1,11 @@
+version: "3.9"
+
+services:
+  broker_video:
+    build: .
+    container_name: broker_video
+    command: python src/broker/broker_video.py
+    ports:
+      - "5555:5555"
+      - "5556:5556"
+    restart: unless-stopped

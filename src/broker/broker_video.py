@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 MAX_QUEUE_PER_ROOM = 30
 
+
 @dataclass
 class VideoMessage:
     room: bytes
@@ -50,6 +51,8 @@ class VideoBroker:
         # QoS por sala
         self.room_queues = {}
         self.local_rooms = {"A", "B", "C"}
+        self.peer_sockets = []
+        self.seen_messages = set()
 
     def start(self):
         self.running = True
@@ -57,8 +60,8 @@ class VideoBroker:
         print(f"[{self.broker_id}] Publishers na porta {self.pub_port}")
         print(f"[{self.broker_id}] Subscribers na porta {self.sub_port}")
 
-        self.proxy_thread = threading.Thread(target=self.proxy_loop)
-        self.cluster_thread = threading.Thread(target=self.interbroker_loop)
+        self.proxy_thread = threading.Thread(target=self.proxy_loop, daemon=True)
+        self.cluster_thread = threading.Thread(target=self.interbroker_loop, daemon=True)
 
         self.proxy_thread.start()
         self.cluster_thread.start()
@@ -69,7 +72,8 @@ class VideoBroker:
         except zmq.ContextTerminated:
             print(f"[{self.broker_id}] Contexto encerrado")
         except Exception as e:
-            print(f"[{self.broker_id}] Erro no proxy: {e}")
+            if self.running:
+                print(f"[{self.broker_id}] Erro no proxy: {e}")
 
     def route_room_message(self, message):
         """
@@ -107,12 +111,18 @@ class VideoBroker:
         self.backend.send_multipart(message)
 
     def stop(self):
+        if not self.running:
+            return
+
         self.running = False
-        self.frontend.close()
-        self.backend.close()
+
+        for peer_socket in self.peer_sockets:
+            peer_socket.close(linger=0)
+
+        self.frontend.close(linger=0)
+        self.backend.close(linger=0)
         self.context.term()
         print(f"[{self.broker_id}] Broker encerrado")
-
 
     # =========================
     # CLUSTER ENTRE BROKERS
@@ -125,10 +135,6 @@ class VideoBroker:
         peer_socket = self.context.socket(zmq.SUB)
         peer_socket.connect(f"tcp://{peer_host}:{peer_pub_port}")
         peer_socket.setsockopt_string(zmq.SUBSCRIBE, "")
-
-        if not hasattr(self, 'peer_sockets'):
-            self.peer_sockets = []
-
         self.peer_sockets.append(peer_socket)
         print(f"[{self.broker_id}] Conectado ao peer {peer_host}:{peer_pub_port}")
 
@@ -137,15 +143,12 @@ class VideoBroker:
         Recebe frames de outros brokers e redistribui localmente.
         Agora com prevenção básica de loops.
         """
-        if not hasattr(self, 'seen_messages'):
-            self.seen_messages = set()
-
         while self.running:
-            for peer in getattr(self, 'peer_sockets', []):
+            for peer in self.peer_sockets:
                 try:
                     message = peer.recv_multipart(flags=zmq.NOBLOCK)
 
-                    # formato esperado: [room, sender, msg_id, payload]
+                    # formato esperado: [room, sender, msg_id, timestamp, payload]
                     if len(message) == 5:
                         room, sender, msg_id, timestamp, payload = message
                         msg_key = msg_id.decode(errors='ignore')
@@ -162,10 +165,11 @@ class VideoBroker:
                 except zmq.Again:
                     pass
                 except Exception as e:
-                    print(f"[{self.broker_id}] Erro inter-broker: {e}")
+                    if self.running:
+                        print(f"[{self.broker_id}] Erro inter-broker: {e}")
 
             # evita crescimento infinito da memória
-            if len(getattr(self, 'seen_messages', set())) > 5000:
+            if len(self.seen_messages) > 5000:
                 self.seen_messages.clear()
 
             time.sleep(0.005)
@@ -175,15 +179,16 @@ if __name__ == "__main__":
     broker = VideoBroker()
 
     # salas locais deste broker (exemplo A-C)
-    broker.local_rooms = {"A", "B", "C"}
+    broker.local_rooms = {"A", "B", "C", "SALA_A", "SALA_B", "SALA_C"}
 
     # Exemplo para cluster: conectar a outro broker
     # broker.connect_to_peer("192.168.0.10", 5555)
 
     try:
         broker.start()
-
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
+        pass
+    finally:
         broker.stop()
