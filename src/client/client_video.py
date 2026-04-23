@@ -7,15 +7,13 @@ import threading
 import uuid
 from dataclasses import dataclass
 import sys
-
+import platform
 
 # =========================
 # CONFIGURAÇÕES
 # =========================
 VIDEO_FPS = 15
 MAX_FRAME_QUEUE = 10
-HEARTBEAT_INTERVAL = 2
-
 
 @dataclass
 class ClientConfig:
@@ -24,6 +22,7 @@ class ClientConfig:
     broker_host: str = "localhost"
     video_pub_port: int = 5555
     video_sub_port: int = 5556
+    camera_index: int = 0
 
 
 class VideoClient:
@@ -32,86 +31,64 @@ class VideoClient:
         self.context = zmq.Context()
         self.running = False
 
-        # canal de envio de vídeo
+        # envio
         self.video_pub = self.context.socket(zmq.PUB)
         self.video_pub.connect(
             f"tcp://{config.broker_host}:{config.video_pub_port}"
         )
 
-        # canal de recepção de vídeo
+        # recepção
         self.video_sub = self.context.socket(zmq.SUB)
         self.video_sub.connect(
             f"tcp://{config.broker_host}:{config.video_sub_port}"
         )
         self.video_sub.setsockopt_string(zmq.SUBSCRIBE, config.room)
 
-        # buffer para QoS simples
         self.frame_queue = queue.Queue(maxsize=MAX_FRAME_QUEUE)
-
-        self.capture_thread = None
-        self.send_thread = None
-        self.recv_thread = None
-        self.render_thread = None
-
         self.remote_frames = {}
-        self.remote_frames_lock = threading.Lock()
-
-    # =========================
-    # CONTROLE DE SESSÃO
-    # =========================
-    def login(self):
-        print(f"[LOGIN] Usuário {self.config.user_id} conectado")
-        print(f"[ROOM] Entrando na sala {self.config.room}")
-        print(
-            f"[BROKER] Conectando em {self.config.broker_host}:"
-            f"{self.config.video_pub_port}/{self.config.video_sub_port}"
-        )
+        self.lock = threading.Lock()
 
     def start(self):
         self.running = True
-        self.login()
 
-        self.capture_thread = threading.Thread(target=self.capture_loop, daemon=True)
-        self.send_thread = threading.Thread(target=self.send_loop, daemon=True)
-        self.recv_thread = threading.Thread(target=self.receive_loop, daemon=True)
-        self.render_thread = threading.Thread(target=self.render_loop, daemon=True)
+        print(f"[LOGIN] {self.config.user_id}")
+        print(f"[ROOM] {self.config.room}")
+        print(f"[BROKER] {self.config.broker_host}")
+        print(f"[CAMERA] índice {self.config.camera_index}")
 
-        self.capture_thread.start()
-        self.send_thread.start()
-        self.recv_thread.start()
-        self.render_thread.start()
+        threading.Thread(target=self.capture_loop).start()
+        threading.Thread(target=self.send_loop).start()
+        threading.Thread(target=self.receive_loop).start()
+        threading.Thread(target=self.render_loop).start()
 
     def stop(self):
-        if not self.running:
-            return
-
         self.running = False
-        self.video_pub.close(linger=0)
-        self.video_sub.close(linger=0)
+        self.video_pub.close()
+        self.video_sub.close()
         self.context.term()
-        print("[STOP] Encerrando cliente de vídeo")
+        print("[STOP] Cliente encerrado")
 
-    # =========================
-    # THREADS
-    # =========================
     def capture_loop(self):
-        cap = cv2.VideoCapture(0)
-        cap.set(cv2.CAP_PROP_FPS, VIDEO_FPS)
+        # backend específico para Linux
+        if platform.system() == "Linux":
+            cap = cv2.VideoCapture(self.config.camera_index, cv2.CAP_V4L2)
+        else:
+            cap = cv2.VideoCapture(self.config.camera_index)
 
         if not cap.isOpened():
-            print("[ERRO] Não foi possível abrir a câmera")
-            self.stop()
+            print(f"[ERRO] Não foi possível abrir a câmera no índice {self.config.camera_index}")
+            self.running = False
             return
+
+        cap.set(cv2.CAP_PROP_FPS, VIDEO_FPS)
 
         while self.running:
             ret, frame = cap.read()
             if not ret:
-                time.sleep(0.01)
                 continue
 
             frame = cv2.resize(frame, (320, 240))
 
-            # QoS para vídeo: se a fila estiver cheia, descarta frame antigo
             if self.frame_queue.full():
                 try:
                     self.frame_queue.get_nowait()
@@ -137,22 +114,14 @@ class VideoClient:
                 continue
 
             payload = buffer.tobytes()
-            topic = self.config.room
-            msg_id = str(uuid.uuid4()).encode()
-            timestamp = str(time.time()).encode()
 
-            try:
-                self.video_pub.send_multipart([
-                    topic.encode(),
-                    self.config.user_id.encode(),
-                    msg_id,
-                    timestamp,
-                    payload
-                ])
-            except zmq.ZMQError:
-                if self.running:
-                    print("[ERRO] Falha ao enviar frame")
-                break
+            self.video_pub.send_multipart([
+                self.config.room.encode(),
+                self.config.user_id.encode(),
+                str(uuid.uuid4()).encode(),
+                str(time.time()).encode(),
+                payload
+            ])
 
     def receive_loop(self):
         while self.running:
@@ -165,57 +134,48 @@ class VideoClient:
                 np_buffer = np.frombuffer(payload, dtype=np.uint8)
                 frame = cv2.imdecode(np_buffer, cv2.IMREAD_COLOR)
 
-                # só salva se conseguiu decodificar
                 if frame is not None:
-                    with self.remote_frames_lock:
+                    with self.lock:
                         self.remote_frames[sender] = frame
 
             except zmq.Again:
                 time.sleep(0.01)
-            except zmq.ZMQError:
-                if self.running:
-                    print("[ERRO] Falha ao receber frame")
-                break
 
     def render_loop(self):
         while self.running:
-            with self.remote_frames_lock:
-                remote_items = list(self.remote_frames.items())
-
-            for sender, frame in remote_items:
-                cv2.imshow(f"Remote - {sender}", frame)
+            with self.lock:
+                for sender, frame in self.remote_frames.items():
+                    cv2.imshow(f"Remote - {sender}", frame)
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 self.stop()
                 break
-
-            time.sleep(0.01)
 
         cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 4:
-        print("Uso: python client_video.py <user_id> <room> <broker_host>")
+        print("Uso: python client_video.py <user_id> <room> <broker_host> [camera_index]")
         sys.exit(1)
 
     user_id = sys.argv[1]
     room = sys.argv[2]
     broker_host = sys.argv[3]
+    camera_index = int(sys.argv[4]) if len(sys.argv) > 4 else 0
 
     config = ClientConfig(
         user_id=user_id,
         room=room,
-        broker_host=broker_host
+        broker_host=broker_host,
+        camera_index=camera_index
     )
 
     client = VideoClient(config)
 
     try:
         client.start()
-        while client.running:
+        while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        pass
-    finally:
         client.stop()
