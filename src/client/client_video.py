@@ -265,7 +265,7 @@ class VideoClient:
                 ]
 
             if local_frame is not None:
-                tiles.append(self._build_tile(local_frame, f"Você ({self.config.user_id})"))
+                tiles.append(self._build_tile(local_frame, f"Eu ({self.config.user_id})"))
             else:
                 tiles.append(self._placeholder_tile("Aguardando câmera..."))
 
