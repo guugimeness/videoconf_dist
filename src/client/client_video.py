@@ -62,7 +62,7 @@ class VideoClient:
         self.login()
 
         # Dá tempo para o SUB assinar antes do fluxo de vídeo começar.
-        time.sleep(0.5)
+        time.sleep(1.5)
 
         self.threads = [
             threading.Thread(target=self.capture_loop, name="capture", daemon=True),
@@ -144,6 +144,7 @@ class VideoClient:
 
     def send_loop(self):
         encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 60]
+        time.sleep(1)
 
         while self.running:
             try:
@@ -167,6 +168,9 @@ class VideoClient:
                     timestamp,
                     payload,
                 ])
+
+                print(f"[SEND] {self.config.user_id}")
+
             except zmq.ZMQError:
                 if self.running:
                     print("[ERRO] Falha ao enviar frame ao broker")
@@ -185,6 +189,8 @@ class VideoClient:
                 break
 
             sender_name = sender.decode(errors="ignore")
+            if sender_name == self.config.user_id:
+                continue
             np_buffer = np.frombuffer(payload, dtype=np.uint8)
             frame = cv2.imdecode(np_buffer, cv2.IMREAD_COLOR)
 
