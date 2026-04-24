@@ -1,35 +1,58 @@
 import zmq
 import time
 
+XSUB_PORT = 5555
+XPUB_PORT = 5556
 
 def main():
-    # Broker Central: 
-    # Recebe mensagens dos publishers (clientes enviando mídia) e 
-    # distribui para os subscribers (clientes recebendo mídia).
-    
     context = zmq.Context()
-    print("[BROKER] Iniciando Broker Central...")
 
-    # Socket onde os clientes vão publicar os dados 
+    print("[BROKER] Iniciando broker ativo...")
+
     frontend = context.socket(zmq.XSUB)
-    frontend.bind("tcp://*:5555")  
-    print("[BROKER] Escutando publishers na porta 5555")
+    frontend.bind(f"tcp://*:{XSUB_PORT}")
 
-    # Socket onde os clientes vão assinar para receber dados
     backend = context.socket(zmq.XPUB)
-    backend.bind("tcp://*:5556")  
-    print("[BROKER] Distribuindo para subscribers na porta 5556")
+    backend.bind(f"tcp://*:{XPUB_PORT}")
+
+    poller = zmq.Poller()
+    poller.register(frontend, zmq.POLLIN)
+    poller.register(backend, zmq.POLLIN)
+
+    msg_count = 0
+    start_time = time.time()
 
     try:
-        zmq.proxy(frontend, backend)
-    except zmq.ContextTerminated:
-        print("[BROKER] Contexto ZeroMQ encerrado.")
+        while True:
+            socks = dict(poller.poll(1000))
+
+            # 📥 Mensagens dos publishers
+            if frontend in socks:
+                message = frontend.recv()
+
+                msg_count += 1
+
+                # DEBUG opcional
+                if msg_count % 100 == 0:
+                    print(f"[BROKER] {msg_count} mensagens processadas")
+
+                backend.send(message)
+
+            # 📡 Subscriptions dos subscribers
+            if backend in socks:
+                subscription = backend.recv()
+
+                # Encaminha subscription para publishers
+                frontend.send(subscription)
+
     except KeyboardInterrupt:
-        print("\n[BROKER] Encerrando o Broker Central manualmente.")
+        print("\n[BROKER] Encerrando...")
+
     finally:
         frontend.close()
         backend.close()
         context.term()
+
 
 if __name__ == "__main__":
     main()
