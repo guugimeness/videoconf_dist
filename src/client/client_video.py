@@ -169,8 +169,6 @@ class VideoClient:
                     payload,
                 ])
 
-                print(f"[SEND] {self.config.user_id}")
-
             except zmq.ZMQError:
                 if self.running:
                     print("[ERRO] Falha ao enviar frame ao broker")
@@ -244,20 +242,30 @@ class VideoClient:
         return tile
 
     def _compose_grid(self, tiles):
+        import math
+
         count = len(tiles)
+
+        if count == 0:
+            return np.zeros((240, 320, 3), dtype=np.uint8)
+
         cols = math.ceil(math.sqrt(count))
         rows = math.ceil(count / cols)
 
-        while len(tiles) < rows * cols:
-            tiles.append(np.zeros((240, 320, 3), dtype=np.uint8))
+        rows_imgs = []
+        idx = 0
 
-        row_images = []
-        for row in range(rows):
-            start = row * cols
-            end = start + cols
-            row_images.append(np.hstack(tiles[start:end]))
+        for r in range(rows):
+            row = []
+            for c in range(cols):
+                if idx < count:
+                    row.append(tiles[idx])
+                else:
+                    row.append(np.zeros_like(tiles[0]))
+                idx += 1
+            rows_imgs.append(np.hstack(row))
 
-        return np.vstack(row_images)
+        return np.vstack(rows_imgs)
 
     def render_loop(self):
         while self.running:
@@ -271,9 +279,9 @@ class VideoClient:
                 ]
 
             if local_frame is not None:
-                tiles.append(self._build_tile(local_frame, f"Eu ({self.config.user_id})"))
+                tiles.append(self._build_tile(local_frame, f"Voce - {self.config.user_id}"))
             else:
-                tiles.append(self._placeholder_tile("Aguardando câmera..."))
+                tiles.append(self._placeholder_tile("Aguardando camera..."))
 
             for sender, frame in sorted(remote_items, key=lambda item: item[0]):
                 tiles.append(self._build_tile(frame, sender))
