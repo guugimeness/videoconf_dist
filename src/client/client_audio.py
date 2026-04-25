@@ -49,7 +49,7 @@ class AudioClient:
         
         def audio_callback(indata, frames, time_info, status):
             if status:
-                print(f"[ÁUDIO] ⚠️  Status callback: {status}")
+                # print(f"[ÁUDIO] ⚠️  Status callback: {status}")
                 return
             
             try:
@@ -60,10 +60,10 @@ class AudioClient:
                 try:
                     self.audio_queue.put_nowait(audio_data.tobytes())
                 except queue.Full:
-                    print("[ÁUDIO] ⚠️  Fila de captura cheia - frame descartado")
+                    print("[ÁUDIO] Fila de captura cheia - frame descartado")
                     
             except Exception as e:
-                print(f"[ÁUDIO] ❌ Erro no callback: {e}")
+                print(f"[ÁUDIO] Erro no callback: {e}")
         
         # Inicia stream de captura
         try:
@@ -74,14 +74,14 @@ class AudioClient:
                 blocksize=CHUNK,
                 callback=audio_callback,
             ):
-                print("[ÁUDIO] ✓ Captura iniciada")
+                # print("[ÁUDIO] ✓ Captura iniciada")
                 
                 # Aguarda sinal de parada
                 while not self.stop_event.is_set():
                     time.sleep(0.1)
                     
         except Exception as e:
-            print(f"[ÁUDIO] ❌ Erro na captura: {e}")
+            print(f"[ÁUDIO] Erro na captura: {e}")
 
 
     def send_audio_to_broker(self):
@@ -99,7 +99,7 @@ class AudioClient:
                 addr = f"tcp://{cfg.BROKER_HOST}:{cfg.PUBLISH_PORT}"
                 socket.connect(addr)
                 
-                print(f"[ÁUDIO→BROKER] ✓ Conectado a {addr}")
+                # print(f"[ÁUDIO→BROKER] ✓ Conectado a {addr}")
                 self.connected_event.set()
                 reconnect_count = 0
                 
@@ -119,17 +119,17 @@ class AudioClient:
                         continue
                         
             except zmq.error.Again:
-                print("[ÁUDIO→BROKER] ⚠️  Timeout ao enviar")
+                # print("[ÁUDIO→BROKER] Timeout ao enviar")
                 self.connected_event.clear()
                 
             except Exception as e:
-                print(f"[ÁUDIO→BROKER] ❌ Erro: {e}")
+                # print(f"[ÁUDIO→BROKER] Erro: {e}")
                 self.connected_event.clear()
                 
                 # Reconexão com backoff exponencial
                 reconnect_count = min(reconnect_count + 1, MAX_RECONNECT_ATTEMPTS)
                 delay = RECONNECT_DELAY * (2 ** (reconnect_count - 1))
-                print(f"[ÁUDIO→BROKER] 🔄 Reconectando em {delay}s (tentativa {reconnect_count}/{MAX_RECONNECT_ATTEMPTS})")
+                # print(f"[ÁUDIO→BROKER] Reconectando em {delay}s (tentativa {reconnect_count}/{MAX_RECONNECT_ATTEMPTS})")
                 
                 time.sleep(delay)
                 
@@ -159,7 +159,7 @@ class AudioClient:
                 topic = f"{self.room}:AUDIO:".encode()
                 socket.setsockopt(zmq.SUBSCRIBE, topic)
                 
-                print(f"[ÁUDIO←BROKER] ✓ Conectado a {addr}")
+                # print(f"[ÁUDIO←BROKER] ✓ Conectado a {addr}")
                 reconnect_count = 0
                 
                 # Loop de recepção
@@ -184,19 +184,20 @@ class AudioClient:
                             self.received_frames += 1
                             
                         except (ValueError, IndexError, UnicodeDecodeError) as e:
-                            print(f"[ÁUDIO←BROKER] ⚠️  Pacote malformado: {e}")
+                            print(f"[ÁUDIO←BROKER] Pacote malformado: {e}")
                             continue
                             
                     except zmq.error.Again:
-                        print("[ÁUDIO←BROKER] ⚠️  Timeout na recepção")
+                        pass
+                        # print("[ÁUDIO←BROKER] Timeout na recepção")
                         
             except Exception as e:
-                print(f"[ÁUDIO←BROKER] ❌ Erro: {e}")
+                print(f"[ÁUDIO←BROKER] Erro: {e}")
                 
                 # Reconexão
                 reconnect_count = min(reconnect_count + 1, MAX_RECONNECT_ATTEMPTS)
                 delay = RECONNECT_DELAY * (2 ** (reconnect_count - 1))
-                print(f"[ÁUDIO←BROKER] 🔄 Reconectando em {delay}s")
+                print(f"[ÁUDIO←BROKER] Reconectando em {delay}s")
                 
                 time.sleep(delay)
                 
@@ -218,7 +219,7 @@ class AudioClient:
                 channels=1,
                 blocksize=CHUNK
             ) as stream:
-                print("[ÁUDIO-PLAYBACK] ✓ Playback iniciado")
+                # print("[ÁUDIO-PLAYBACK] ✓ Playback iniciado")
                 
                 while not self.stop_event.is_set():
                     try:
@@ -237,11 +238,11 @@ class AudioClient:
                             time.sleep(0.01)  # Pequeno delay se vazio
                             
                     except Exception as e:
-                        print(f"[ÁUDIO-PLAYBACK] ❌ Erro: {e}")
+                        print(f"[ÁUDIO-PLAYBACK] Erro: {e}")
                         time.sleep(0.1)
                         
         except Exception as e:
-            print(f"[ÁUDIO-PLAYBACK] ❌ Erro ao iniciar: {e}")
+            print(f"[ÁUDIO-PLAYBACK] Erro ao iniciar: {e}")
 
 
     def heartbeat_monitor(self):
@@ -253,11 +254,11 @@ class AudioClient:
                 last_count = self.received_frames
                 time.sleep(HEARTBEAT_INTERVAL)
                 
-                if self.received_frames == last_count and self.received_frames > 0:
-                    print("[HEARTBEAT] ⚠️  Nenhum áudio recebido nos últimos segundos")
+                # if self.received_frames == last_count and self.received_frames > 0:
+                #     print("[HEARTBEAT] Nenhum áudio recebido nos últimos segundos")
                     
             except Exception as e:
-                print(f"[HEARTBEAT] ❌ Erro: {e}")
+                print(f"[HEARTBEAT] Erro: {e}")
 
 
     def print_stats(self):
@@ -269,10 +270,10 @@ class AudioClient:
                 qsize = self.audio_queue.qsize()
                 buffer_size = len(self.jitter_buffer)
                 
-                print(f"\n[STATS] 📊 Enviados: {self.sent_frames} | "
-                      f"Recebidos: {self.received_frames} | "
-                      f"Fila: {qsize} | "
-                      f"Buffer: {buffer_size}\n")
+                # print(f"\n[STATS] 📊 Enviados: {self.sent_frames} | "
+                #       f"Recebidos: {self.received_frames} | "
+                #       f"Fila: {qsize} | "
+                #       f"Buffer: {buffer_size}\n")
                       
             except Exception as e:
                 print(f"[STATS] Erro: {e}")
@@ -294,14 +295,14 @@ class AudioClient:
             t = threading.Thread(target=target, daemon=True, name=name)
             t.start()
         
-        print(f"[ÁUDIO] ✓ {self.user_name} conectado na sala {self.room}\n")
+        # print(f"[ÁUDIO] ✓ {self.user_name} conectado na sala {self.room}\n")
 
 
     def stop(self):
         """Para todas as threads."""
         self.stop_event.set()
         time.sleep(1)
-        print("\n[ÁUDIO] ✓ Desconectado")
+        # print("\n[ÁUDIO] ✓ Desconectado")
 
 
 def main():
@@ -331,8 +332,8 @@ def get_default_devices():
     input_device = sd.default.device[0]
     output_device = sd.default.device[1]
     
-    print(f"[ÁUDIO] 🎤 Input device: {input_device}")
-    print(f"[ÁUDIO] 🔊 Output device: {output_device}")
+    # print(f"[ÁUDIO] Input device: {input_device}")
+    # print(f"[ÁUDIO] Output device: {output_device}")
     
     return input_device, output_device
 
