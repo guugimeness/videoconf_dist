@@ -5,8 +5,7 @@ import numpy as np
 import queue
 import time
 from collections import deque
-from src.shared import config as cfg
-import sounddevice as sd
+from shared import config as cfg
 
 
 SAMPLE_RATE = 16000
@@ -18,27 +17,6 @@ HEARTBEAT_TIMEOUT = 15  # segundos
 MAX_RECONNECT_ATTEMPTS = 5
 RECONNECT_DELAY = 2  # segundos
 
-
-def get_default_devices():
-    devices = sd.query_devices()
-
-    input_device = None
-    output_device = None
-
-    for i, dev in enumerate(devices):
-        if input_device is None and dev['max_input_channels'] > 0:
-            input_device = i
-
-        if output_device is None and dev['max_output_channels'] > 0:
-            output_device = i
-
-        if input_device is not None and output_device is not None:
-            break
-
-    print(f"[ÁUDIO] 🎤 Input device: {input_device}")
-    print(f"[ÁUDIO] 🔊 Output device: {output_device}")
-
-    return input_device, output_device
 
 class AudioClient:
     """Cliente de áudio robusto com reconexão, compressão e jitter buffer."""
@@ -239,7 +217,7 @@ class AudioClient:
                 samplerate=SAMPLE_RATE,
                 channels=1,
                 blocksize=CHUNK
-            ):
+            ) as stream:
                 print("[ÁUDIO-PLAYBACK] ✓ Playback iniciado")
                 
                 while not self.stop_event.is_set():
@@ -254,7 +232,7 @@ class AudioClient:
                         if audio_bytes:
                             # Reconverte int16 → float32 [-1, 1]
                             audio = np.frombuffer(audio_bytes, dtype=CODEC).astype(np.float32) / 32767.0
-                            sd.OutputStream.write(audio)
+                            stream.write(audio)
                         else:
                             time.sleep(0.01)  # Pequeno delay se vazio
                             
@@ -350,26 +328,12 @@ def main():
         client.stop()
 
 def get_default_devices():
-    import sounddevice as sd
-
-    devices = sd.query_devices()
-
-    input_device = None
-    output_device = None
-
-    for i, dev in enumerate(devices):
-        if input_device is None and dev['max_input_channels'] > 0:
-            input_device = i
-
-        if output_device is None and dev['max_output_channels'] > 0:
-            output_device = i
-
-        if input_device is not None and output_device is not None:
-            break
-
+    input_device = sd.default.device[0]
+    output_device = sd.default.device[1]
+    
     print(f"[ÁUDIO] 🎤 Input device: {input_device}")
     print(f"[ÁUDIO] 🔊 Output device: {output_device}")
-
+    
     return input_device, output_device
 
 if __name__ == "__main__":
