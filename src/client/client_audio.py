@@ -8,7 +8,7 @@ from collections import deque
 import shared.config as cfg
 
 
-SAMPLE_RATE = 16000
+SAMPLE_RATE = 44100
 CHUNK = 1024
 CODEC = np.int16  # Compressão: float32 → int16 (reduz 50% bandwidth)
 JITTER_BUFFER_SIZE = 10  # Quantos frames para buffer de jitter
@@ -25,7 +25,13 @@ class AudioClient:
         self.user_name = user_name
         self.room = room
 
-        self.input_device, self.output_device = get_default_devices()
+        self.input_device = None
+        self.output_device = None
+        self.input_rate = 48000
+        self.output_rate = 48000
+
+        #self.input_rate = int(sd.query_devices(self.input_device)['default_samplerate'])
+        #self.output_rate = int(sd.query_devices(self.output_device)['default_samplerate'])
         
         # Comunicação thread-safe entre callback e socket
         self.audio_queue = queue.Queue(maxsize=100)  # Fila de áudio
@@ -69,10 +75,12 @@ class AudioClient:
         try:
             with sd.InputStream(
                 device=self.input_device,
-                samplerate=SAMPLE_RATE,
+                samplerate=self.input_rate,
                 channels=1,
                 blocksize=CHUNK,
                 callback=audio_callback,
+                dtype='float32',
+                latency='low',
             ):
                 # print("[ÁUDIO] ✓ Captura iniciada")
                 
@@ -177,6 +185,8 @@ class AudioClient:
                             if sender == self.user_name:
                                 continue
                             
+                            print(f"Sender: '{sender}' | Eu: '{self.user_name}'")
+
                             # Coloca no jitter buffer
                             with self.jitter_lock:
                                 self.jitter_buffer.append(audio_bytes)
@@ -215,8 +225,8 @@ class AudioClient:
         try:
             with sd.OutputStream(
                 device=self.output_device,
-                samplerate=SAMPLE_RATE,
-                channels=1,
+                samplerate=self.output_rate,
+                channels=8,
                 blocksize=CHUNK
             ) as stream:
                 # print("[ÁUDIO-PLAYBACK] ✓ Playback iniciado")
@@ -233,6 +243,10 @@ class AudioClient:
                         if audio_bytes:
                             # Reconverte int16 → float32 [-1, 1]
                             audio = np.frombuffer(audio_bytes, dtype=CODEC).astype(np.float32) / 32767.0
+
+                            # duplica canal (mono → stereo)
+                            audio = np.repeat(audio[:, np.newaxis], 8, axis=1)
+                            
                             stream.write(audio)
                         else:
                             time.sleep(0.01)  # Pequeno delay se vazio
