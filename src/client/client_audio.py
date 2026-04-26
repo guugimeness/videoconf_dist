@@ -185,8 +185,6 @@ class AudioClient:
                             if sender == self.user_name:
                                 continue
                             
-                            print(f"Sender: '{sender}' | Eu: '{self.user_name}'")
-
                             # Coloca no jitter buffer
                             with self.jitter_lock:
                                 self.jitter_buffer.append(audio_bytes)
