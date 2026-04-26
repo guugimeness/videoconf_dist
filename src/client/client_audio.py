@@ -25,13 +25,13 @@ class AudioClient:
         self.user_name = user_name
         self.room = room
 
-        self.input_device = None
-        self.output_device = None
-        self.input_rate = 48000
-        self.output_rate = 48000
+        self.input_device = cfg.AUDIO_INPUT_DEVICE
+        self.output_device = cfg.AUDIO_OUTPUT_DEVICE
 
-        #self.input_rate = int(sd.query_devices(self.input_device)['default_samplerate'])
-        #self.output_rate = int(sd.query_devices(self.output_device)['default_samplerate'])
+        self.input_rate = int(sd.query_devices(self.input_device)['default_samplerate'])
+        self.output_rate = int(sd.query_devices(self.output_device)['default_samplerate'])
+
+        self.channels = cfg.AUDIO_CHANNELS
         
         # Comunicação thread-safe entre callback e socket
         self.audio_queue = queue.Queue(maxsize=100)  # Fila de áudio
@@ -76,7 +76,7 @@ class AudioClient:
             with sd.InputStream(
                 device=self.input_device,
                 samplerate=self.input_rate,
-                channels=1,
+                channels=self.channels,
                 blocksize=CHUNK,
                 callback=audio_callback,
                 dtype='float32',
@@ -226,7 +226,7 @@ class AudioClient:
             with sd.OutputStream(
                 device=self.output_device,
                 samplerate=self.output_rate,
-                channels=8,
+                channels=self.channels,
                 blocksize=CHUNK
             ) as stream:
                 # print("[ÁUDIO-PLAYBACK] ✓ Playback iniciado")
@@ -245,7 +245,7 @@ class AudioClient:
                             audio = np.frombuffer(audio_bytes, dtype=CODEC).astype(np.float32) / 32767.0
 
                             # duplica canal (mono → stereo)
-                            audio = np.repeat(audio[:, np.newaxis], 8, axis=1)
+                            audio = np.repeat(audio[:, np.newaxis], self.channels, axis=1)
                             
                             stream.write(audio)
                         else:
