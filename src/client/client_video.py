@@ -13,7 +13,7 @@ import platform
 VIDEO_FPS = 15
 MAX_FRAME_QUEUE = 10
 REMOTE_FRAME_TIMEOUT = 5.0
-WINDOW_NAME = "VideoConf"
+WINDOW_NAME = "Video-Conferencia"
 
 
 @dataclass
@@ -59,7 +59,7 @@ class VideoClient:
 
     def start(self):
         self.running = True
-        self.login()
+        # self.login()
 
         # Dá tempo para o SUB assinar antes do fluxo de vídeo começar.
         time.sleep(1.5)
@@ -177,7 +177,11 @@ class VideoClient:
     def receive_loop(self):
         while self.running:
             try:
-                topic, sender, msg_id, timestamp, payload = self.video_sub.recv_multipart(flags=zmq.NOBLOCK)
+                parts = self.video_sub.recv_multipart(flags=zmq.NOBLOCK)
+                # Informação de vídeo
+                if len(parts) != 5:
+                        continue
+                topic, sender, msg_id, timestamp, payload = parts
             except zmq.Again:
                 time.sleep(0.01)
                 continue
@@ -279,7 +283,7 @@ class VideoClient:
                 ]
 
             if local_frame is not None:
-                tiles.append(self._build_tile(local_frame, f"Voce - {self.config.user_id}"))
+                tiles.append(self._build_tile(local_frame, f"{self.config.user_id}"))
             else:
                 tiles.append(self._placeholder_tile("Aguardando camera..."))
 

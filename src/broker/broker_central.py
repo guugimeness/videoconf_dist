@@ -15,9 +15,11 @@ def main():
 
     # Sockets
     frontend = context.socket(zmq.XSUB)
+    frontend.setsockopt(zmq.RCVHWM, 100)
     frontend.bind(f"tcp://*:{XSUB_PORT}")
 
     backend = context.socket(zmq.XPUB)
+    backend.setsockopt(zmq.SNDHWM, 100)
     backend.bind(f"tcp://*:{XPUB_PORT}")
 
     # Socket de Autenticação (REQ/REP)
@@ -67,29 +69,32 @@ def main():
             # MENSAGENS DOS PUBLISHERS
             if frontend in socks:
                 # Recebemos em bytes, pois pode ser áudio, vídeo ou texto
-                message = frontend.recv()
-                msg_count += 1
+                parts = frontend.recv_multipart()
 
-                # Tenta espionar o remetente para atualizar o Heartbeat
                 try:
-                    # Separa o cabeçalho usando o delimitador em bytes (b"|")
-                    parts = message.split(b"|", 1)
-                    if len(parts) >= 1:
-                        header_str = parts[0].decode('utf-8')
-                        # Formato: "SALA:TEXTO:NOME:ID" ou "SALA:HEARTBEAT:NOME:0"
-                        header_pieces = header_str.split(":")
-                        
-                        if len(header_pieces) >= 3:
-                            sender = header_pieces[2]
-                            # Se o usuário está vivo, zera o cronômetro dele!
-                            if sender in active_users:
-                                active_users[sender]["last_seen"] = current_time
+                    sender_name = None
+                    
+                    # Se for o formato de VÍDEO do seu colega [room, sender, msg_id, timestamp, payload]
+                    if len(parts) == 5:
+                        sender_name = parts[1].decode('utf-8', errors='ignore')
+                    
+                    # Se for o formato de TEXTO/ÁUDIO/HEARTBEAT seu ("SALA:TEXTO:NOME:ID|payload")
+                    elif len(parts) == 1:
+                        header_parts = parts[0].split(b"|", 1)
+                        if len(header_parts) >= 1:
+                            header_str = header_parts[0].decode('utf-8', errors='ignore')
+                            header_pieces = header_str.split(":")
+                            if len(header_pieces) >= 3:
+                                sender_name = header_pieces[2]
+
+                    # Atualiza a sessão provando que o usuário está vivo (independente da mídia enviada)
+                    if sender_name and sender_name in active_users:
+                        active_users[sender_name]["last_seen"] = current_time
                 except Exception:
-                    # Ignora erros de decode silenciosamente (caso seja um pacote de vídeo puro sem esse cabeçalho)
                     pass 
 
-                # Repassa a mensagem para o Backend normalmente
-                backend.send(message)
+                # O Broker repassa a mensagem exatamente como chegou (Multiparte)
+                backend.send_multipart(parts)
 
             # INSCRIÇÕES DOS SUBSCRIBERS
             if backend in socks:

@@ -5,7 +5,7 @@ import numpy as np
 import queue
 import time
 from collections import deque
-from shared import config as cfg
+import shared.config as cfg
 
 
 SAMPLE_RATE = 16000

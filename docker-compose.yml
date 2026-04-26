@@ -37,7 +37,7 @@ services:
 
   user1_text:
     build: .
-    command: python src/client/client_text.py user1 SALA_A
+    command: python src/client/client.py user1 SALA_A
     depends_on:
       - broker
     environment:
@@ -46,7 +46,7 @@ services:
 
   user2_text:
     build: .
-    command: python src/client/client_text.py user2 SALA_A
+    command: python src/client/client.py user2 SALA_A
     depends_on:
       - broker
     environment:

@@ -28,3 +28,10 @@ python -m client.client user1 SALA_A
 cd src
 python -m client.client user2 SALA_A
 ```
+
+### Fechar o Broker
+
+```bash
+# Terminal 1: Broker
+docker-compose down
+```
