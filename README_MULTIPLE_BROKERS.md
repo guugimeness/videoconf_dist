@@ -5,21 +5,116 @@
 - Portas devem estar disponíveis antes de iniciar brokers
 - Recomenda-se usar 127.0.0.1 para teste local
 
-## Como Usar 
+## Como Usar
+
+###  Iniciar o Sistema
+
+#### Opção 1: Script Automático 
+```bash
+# Dar permissão de execução
+chmod +x start_cluster.sh
+
+# Iniciar cluster completo
+./start_cluster.sh
+```
+
+#### Opção 2: Inicialização Manual
+```bash
+# Terminal 1: Broker 0
+PYTHONPATH=src python3 src/broker/broker_node.py --broker-id 0 &
+
+# Terminal 2: Broker 1
+PYTHONPATH=src python3 src/broker/broker_node.py --broker-id 1 &
+
+# Terminal 3: Broker 2
+PYTHONPATH=src python3 src/broker/broker_node.py --broker-id 2 &
+```
+
+### Conectar Clientes
+
+**IMPORTANTE**: Sempre use `PYTHONPATH=src` para executar clientes!
 
 ```bash
-# Opção 1: Script rápido
-chmod +x start_cluster.sh
-./start_cluster.sh
+# Cliente de texto (recomendado para teste)
+PYTHONPATH=src python3 src/client/client.py alice SALA_A
 
-# Opção 2: Manual
-python3 src/broker/broker_node.py --broker-id 0 &
-python3 src/broker/broker_node.py --broker-id 1 &
-python3 src/broker/broker_node.py --broker-id 2 &
-
-# Em outro terminal
-python3 src/client/client.py alice SALA_A
+# Ou executar como módulo Python
+PYTHONPATH=src python3 -m client.client alice SALA_A
 ```
+
+**Exemplos de uso:**
+```bash
+# Diferentes usuários (serão distribuídos automaticamente)
+PYTHONPATH=src python3 src/client/client.py alice SALA_A
+PYTHONPATH=src python3 src/client/client.py bob SALA_B
+PYTHONPATH=src python3 src/client/client.py charlie SALA_A
+```
+
+#### Opção 1: Script de Parada
+```bash
+# Dar permissão de execução
+chmod +x stop_cluster.sh
+
+# Parar tudo
+./stop_cluster.sh
+```
+
+#### Opção 2: Parada Manual
+```bash
+# Mata todos os brokers e clientes
+pkill -f broker_node
+pkill -f client.py
+
+# Ou usar o script de limpeza (se existir)
+./stop_cluster.sh
+```
+
+#### Parar Componentes Individualmente
+```bash
+# Parar apenas brokers
+pkill -f broker_node
+
+# Parar apenas clientes
+pkill -f client.py
+
+# Forçar encerramento (se necessário)
+pkill -9 -f broker_node
+pkill -9 -f client.py
+```
+# Ver processos ativos
+ps aux | grep -E "(broker_node|client\.py)"
+
+# Se nada aparecer, tudo foi parado
+```
+
+##  Solução de Problemas
+
+### Erro: `ModuleNotFoundError: No module named 'shared'`
+```bash
+# ❌ Errado
+python3 src/client/client.py alice SALA_A
+
+# ✅ Correto
+PYTHONPATH=src python3 src/client/client.py alice SALA_A
+```
+
+### Erro: `ModuleNotFoundError: No module named 'client'`
+- Verifique se os arquivos `__init__.py` existem em `src/client/`, `src/broker/`, `src/shared/`
+- Use sempre `PYTHONPATH=src`
+
+### Brokers Não Conectam
+```bash
+# Verificar portas em uso
+netstat -tlnp | grep :655
+
+# Liberar portas se necessário
+sudo fuser -k 6555/tcp 6556/tcp 6557/tcp
+```
+
+### Cliente Não Conecta ao Broker Correto
+- Verifique se todos os 3 brokers estão rodando
+- Use `ps aux | grep broker_node` para confirmar
+- Cliente será automaticamente direcionado pelo hash do username
 
 ###  Gerenciamento de Brokers
 

@@ -1,7 +1,14 @@
-cffi==2.0.0
-numpy==2.4.4
-opencv-python==4.13.0.92
-pycparser==3.0
-pyzmq==25.1.2
-sounddevice==0.4.6
-numpy
+# Core dependencies for video conferencing system
+pyzmq>=25.1.0          # ZeroMQ for message passing between brokers and clients
+numpy>=1.24.0          # Numerical computing for audio/video processing
+opencv-python>=4.8.0   # Computer vision for video capture and processing
+sounddevice>=0.4.6     # Audio input/output device handling
+
+# Dependencies for pyzmq (automatically installed)
+cffi>=1.15.0           # C Foreign Function Interface
+pycparser>=2.21        # C parser
+
+# Note: For audio functionality, you may need system packages:
+# Ubuntu/Debian: sudo apt-get install portaudio19-dev
+# macOS: brew install portaudio
+# Windows: No additional packages needed

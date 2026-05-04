@@ -2,9 +2,9 @@ import sys
 import threading
 from shared import config as cfg
 from shared import broker_discovery
-from client.client_text import TextClient
-from client.client_audio import AudioClient
-from client.client_video import VideoClient, ClientConfig
+from .client_text import TextClient
+from .client_audio import AudioClient
+from .client_video import VideoClient, ClientConfig
 
 
 def main():
