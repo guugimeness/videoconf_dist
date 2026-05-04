@@ -9,11 +9,14 @@ from dataclasses import dataclass
 import sys
 import math
 import platform
+from shared import broker_discovery
 
 VIDEO_FPS = 15
 MAX_FRAME_QUEUE = 10
 REMOTE_FRAME_TIMEOUT = 5.0
 WINDOW_NAME = "Video-Conferencia"
+MAX_RECONNECT_ATTEMPTS = 5
+RECONNECT_DELAY = 2
 
 
 @dataclass
@@ -32,14 +35,26 @@ class VideoClient:
         self.context = zmq.Context()
         self.running = False
 
+        # Descoberta de broker
+        try:
+            broker_config = broker_discovery.get_broker_for_user(config.user_id)
+            self.broker_host = broker_config['host']
+            self.video_pub_port = broker_config['publish_port']
+            self.video_sub_port = broker_config['subscribe_port']
+        except Exception:
+            # Fallback para config existente
+            self.broker_host = config.broker_host
+            self.video_pub_port = config.video_pub_port
+            self.video_sub_port = config.video_sub_port
+
         self.video_pub = self.context.socket(zmq.PUB)
         self.video_pub.connect(
-            f"tcp://{config.broker_host}:{config.video_pub_port}"
+            f"tcp://{self.broker_host}:{self.video_pub_port}"
         )
 
         self.video_sub = self.context.socket(zmq.SUB)
         self.video_sub.connect(
-            f"tcp://{config.broker_host}:{config.video_sub_port}"
+            f"tcp://{self.broker_host}:{self.video_sub_port}"
         )
         self.video_sub.setsockopt_string(zmq.SUBSCRIBE, config.room)
 
@@ -145,6 +160,9 @@ class VideoClient:
     def send_loop(self):
         encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 60]
         time.sleep(1)
+        
+        reconnect_count = 0
+        current_broker = broker_discovery.get_broker_for_user(self.config.user_id)
 
         while self.running:
             try:
@@ -168,13 +186,41 @@ class VideoClient:
                     timestamp,
                     payload,
                 ])
+                reconnect_count = 0
 
-            except zmq.ZMQError:
+            except zmq.ZMQError as e:
                 if self.running:
-                    print("[ERRO] Falha ao enviar frame ao broker")
-                break
+                    print(f"[VÍDEO] Falha ao enviar frame ao broker: {e}")
+                    
+                    # Tenta reconectar
+                    reconnect_count = min(reconnect_count + 1, MAX_RECONNECT_ATTEMPTS)
+                    delay = RECONNECT_DELAY * (2 ** (reconnect_count - 1))
+                    
+                    if reconnect_count >= MAX_RECONNECT_ATTEMPTS:
+                        # Tenta outro broker
+                        fallback = broker_discovery.select_fallback_broker(current_broker, self.config.user_id)
+                        if fallback:
+                            print(f"[VÍDEO] Broker {current_broker['broker_id']} indisponível. Tentando broker {fallback['broker_id']}...")
+                            current_broker = fallback
+                            self.broker_host = fallback['host']
+                            self.video_pub_port = fallback['publish_port']
+                            
+                            # Reconecta socket
+                            self.video_pub.close()
+                            self.video_pub = self.context.socket(zmq.PUB)
+                            self.video_pub.connect(f"tcp://{self.broker_host}:{self.video_pub_port}")
+                            
+                            reconnect_count = 0
+                        else:
+                            print("[VÍDEO] Nenhum broker disponível")
+                            break
+                    else:
+                        time.sleep(delay)
 
     def receive_loop(self):
+        reconnect_count = 0
+        current_broker = broker_discovery.get_broker_for_user(self.config.user_id)
+        
         while self.running:
             try:
                 parts = self.video_sub.recv_multipart(flags=zmq.NOBLOCK)
@@ -182,12 +228,41 @@ class VideoClient:
                 if len(parts) != 5:
                         continue
                 topic, sender, msg_id, timestamp, payload = parts
+                reconnect_count = 0
+                
             except zmq.Again:
                 time.sleep(0.01)
                 continue
-            except zmq.ZMQError:
+                
+            except zmq.ZMQError as e:
                 if self.running:
-                    print("[ERRO] Falha ao receber frame do broker")
+                    print(f"[VÍDEO] Falha ao receber frame do broker: {e}")
+                    
+                    # Tenta reconectar
+                    reconnect_count = min(reconnect_count + 1, MAX_RECONNECT_ATTEMPTS)
+                    delay = RECONNECT_DELAY * (2 ** (reconnect_count - 1))
+                    
+                    if reconnect_count >= MAX_RECONNECT_ATTEMPTS:
+                        # Tenta outro broker
+                        fallback = broker_discovery.select_fallback_broker(current_broker, self.config.user_id)
+                        if fallback:
+                            print(f"[VÍDEO] Broker {current_broker['broker_id']} indisponível. Tentando broker {fallback['broker_id']}...")
+                            current_broker = fallback
+                            self.broker_host = fallback['host']
+                            self.video_sub_port = fallback['subscribe_port']
+                            
+                            # Reconecta socket
+                            self.video_sub.close()
+                            self.video_sub = self.context.socket(zmq.SUB)
+                            self.video_sub.connect(f"tcp://{self.broker_host}:{self.video_sub_port}")
+                            self.video_sub.setsockopt_string(zmq.SUBSCRIBE, self.config.room)
+                            
+                            reconnect_count = 0
+                        else:
+                            print("[VÍDEO] Nenhum broker disponível")
+                            break
+                    else:
+                        time.sleep(delay)
                 break
 
             sender_name = sender.decode(errors="ignore")

@@ -6,6 +6,7 @@ import queue
 import time
 from collections import deque
 import shared.config as cfg
+from shared import broker_discovery
 
 
 SAMPLE_RATE = 44100
@@ -21,9 +22,20 @@ RECONNECT_DELAY = 2  # segundos
 class AudioClient:
     """Cliente de áudio robusto com reconexão, compressão e jitter buffer."""
     
-    def __init__(self, user_name, room):
+    def __init__(self, user_name, room, broker_host=None, pub_port=None, sub_port=None, auth_port=None):
         self.user_name = user_name
         self.room = room
+        
+        # Descoberta de broker via parâmetros ou config
+        if broker_host is None:
+            broker_config = broker_discovery.get_broker_for_user(user_name)
+            self.broker_host = broker_config['host']
+            self.pub_port = broker_config['publish_port']
+            self.sub_port = broker_config['subscribe_port']
+        else:
+            self.broker_host = broker_host
+            self.pub_port = pub_port or cfg.PUBLISH_PORT
+            self.sub_port = sub_port or cfg.SUBSCRIBE_PORT
 
         self.input_device = cfg.AUDIO_INPUT_DEVICE
         self.output_device = cfg.AUDIO_OUTPUT_DEVICE
@@ -96,6 +108,7 @@ class AudioClient:
         """Thread 2: Envia áudio da fila para o broker com reconexão."""
         
         reconnect_count = 0
+        current_broker = broker_discovery.get_broker_for_user(self.user_name)
         
         while not self.stop_event.is_set():
             try:
@@ -104,10 +117,10 @@ class AudioClient:
                 socket = context.socket(zmq.PUB)
                 socket.setsockopt(zmq.LINGER, 0)
                 
-                addr = f"tcp://{cfg.BROKER_HOST}:{cfg.PUBLISH_PORT}"
+                addr = f"tcp://{current_broker['host']}:{current_broker['publish_port']}"
                 socket.connect(addr)
                 
-                # print(f"[ÁUDIO→BROKER] ✓ Conectado a {addr}")
+                print(f"[ÁUDIO→BROKER] ✓ Conectado ao broker {current_broker['broker_id']}: {addr}")
                 self.connected_event.set()
                 reconnect_count = 0
                 
@@ -125,20 +138,34 @@ class AudioClient:
                         
                     except queue.Empty:
                         continue
+                    except zmq.error.ZMQError:
+                        # Conexão perdida, tenta reconectar
+                        break
                         
             except zmq.error.Again:
-                # print("[ÁUDIO→BROKER] Timeout ao enviar")
+                print("[ÁUDIO→BROKER] Timeout ao enviar")
                 self.connected_event.clear()
                 
             except Exception as e:
-                # print(f"[ÁUDIO→BROKER] Erro: {e}")
+                print(f"[ÁUDIO→BROKER] Erro: {e}")
                 self.connected_event.clear()
                 
-                # Reconexão com backoff exponencial
+                # Reconexão com backoff exponencial e fallback
                 reconnect_count = min(reconnect_count + 1, MAX_RECONNECT_ATTEMPTS)
                 delay = RECONNECT_DELAY * (2 ** (reconnect_count - 1))
-                # print(f"[ÁUDIO→BROKER] Reconectando em {delay}s (tentativa {reconnect_count}/{MAX_RECONNECT_ATTEMPTS})")
                 
+                if reconnect_count >= MAX_RECONNECT_ATTEMPTS:
+                    # Tenta outro broker
+                    fallback = broker_discovery.select_fallback_broker(current_broker, self.user_name)
+                    if fallback:
+                        print(f"[ÁUDIO→BROKER] Broker {current_broker['broker_id']} indisponível. Tentando broker {fallback['broker_id']}...")
+                        current_broker = fallback
+                        reconnect_count = 0
+                        delay = RECONNECT_DELAY
+                    else:
+                        print("[ÁUDIO→BROKER] Nenhum broker disponível")
+                
+                print(f"[ÁUDIO→BROKER] Reconectando em {delay}s (tentativa {reconnect_count}/{MAX_RECONNECT_ATTEMPTS})")
                 time.sleep(delay)
                 
             finally:
@@ -153,6 +180,7 @@ class AudioClient:
         """Thread 3: Recebe áudio do broker e coloca no jitter buffer."""
         
         reconnect_count = 0
+        current_broker = broker_discovery.get_broker_for_user(self.user_name)
         
         while not self.stop_event.is_set():
             try:
@@ -160,14 +188,14 @@ class AudioClient:
                 socket = context.socket(zmq.SUB)
                 socket.setsockopt(zmq.RCVTIMEO, 5000)  # 5s timeout
                 
-                addr = f"tcp://{cfg.BROKER_HOST}:{cfg.SUBSCRIBE_PORT}"
+                addr = f"tcp://{current_broker['host']}:{current_broker['subscribe_port']}"
                 socket.connect(addr)
                 
                 # Assina: "SALA:AUDIO:" (mas não do próprio usuário)
                 topic = f"{self.room}:AUDIO:".encode()
                 socket.setsockopt(zmq.SUBSCRIBE, topic)
                 
-                # print(f"[ÁUDIO←BROKER] ✓ Conectado a {addr}")
+                print(f"[ÁUDIO←BROKER] ✓ Conectado ao broker {current_broker['broker_id']}: {addr}")
                 reconnect_count = 0
                 
                 # Loop de recepção
@@ -194,19 +222,34 @@ class AudioClient:
                         except (ValueError, IndexError, UnicodeDecodeError) as e:
                             print(f"[ÁUDIO←BROKER] Pacote malformado: {e}")
                             continue
-                            
+                    
                     except zmq.error.Again:
                         pass
                         # print("[ÁUDIO←BROKER] Timeout na recepção")
+                    
+                    except zmq.error.ZMQError:
+                        # Conexão perdida
+                        break
                         
             except Exception as e:
                 print(f"[ÁUDIO←BROKER] Erro: {e}")
                 
-                # Reconexão
+                # Reconexão com backoff exponencial e fallback
                 reconnect_count = min(reconnect_count + 1, MAX_RECONNECT_ATTEMPTS)
                 delay = RECONNECT_DELAY * (2 ** (reconnect_count - 1))
-                print(f"[ÁUDIO←BROKER] Reconectando em {delay}s")
                 
+                if reconnect_count >= MAX_RECONNECT_ATTEMPTS:
+                    # Tenta outro broker
+                    fallback = broker_discovery.select_fallback_broker(current_broker, self.user_name)
+                    if fallback:
+                        print(f"[ÁUDIO←BROKER] Broker {current_broker['broker_id']} indisponível. Tentando broker {fallback['broker_id']}...")
+                        current_broker = fallback
+                        reconnect_count = 0
+                        delay = RECONNECT_DELAY
+                    else:
+                        print("[ÁUDIO←BROKER] Nenhum broker disponível")
+                
+                print(f"[ÁUDIO←BROKER] Reconectando em {delay}s")
                 time.sleep(delay)
                 
             finally:

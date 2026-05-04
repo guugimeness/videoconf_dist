@@ -1,6 +1,7 @@
 import sys
 import threading
 from shared import config as cfg
+from shared import broker_discovery
 from client.client_text import TextClient
 from client.client_audio import AudioClient
 from client.client_video import VideoClient, ClientConfig
@@ -14,16 +15,26 @@ def main():
     user_name = sys.argv[1]
     room = sys.argv[2]
     
-    broker_host = getattr(cfg, 'BROKER_HOST', 'localhost')
-    pub_port = getattr(cfg, 'PUBLISH_PORT', 5555)
-    sub_port = getattr(cfg, 'SUBSCRIBE_PORT', 5556)
+    print(f"[{user_name}] Iniciando videoconferência na sala {room}...")
+    
+    # Discover broker using consistent hashing
+    try:
+        broker_discovery.validate_broker_config()
+        broker_config = broker_discovery.get_broker_for_user(user_name)
+        print(f"[{user_name}] Conectando ao broker {broker_config['broker_id']} ({broker_config['host']})")
+    except Exception as e:
+        print(f"Erro ao descobrir broker: {e}")
+        return
+    
+    broker_host = broker_config['host']
+    pub_port = broker_config['publish_port']
+    sub_port = broker_config['subscribe_port']
+    auth_port = broker_config['auth_port']
     camera_index = getattr(cfg, 'VIDEO_CAMERA_INDEX', 0)
 
-    print(f"[{user_name}] Iniciando videoconferência na sala {room}...")
-
-    # Instancia os dois clientes
-    text_client = TextClient(user_name, room)
-    audio_client = AudioClient(user_name, room)
+    # Instancia os clientes com broker info
+    text_client = TextClient(user_name, room, broker_host, pub_port, sub_port, auth_port)
+    audio_client = AudioClient(user_name, room, broker_host, pub_port, sub_port, auth_port)
     video_config = ClientConfig(
         user_id=user_name,
         room=room,
