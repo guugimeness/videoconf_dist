@@ -28,6 +28,7 @@ import time
 import argparse
 import sys
 import json
+import hashlib
 from pathlib import Path
 
 # Add parent directory to path for imports
@@ -68,6 +69,9 @@ class BrokerNode:
         # User management
         self.active_users = {}  # Users connected to THIS broker
         self.known_users_global = {}  # Users known in the entire cluster
+        
+        # Message forwarding cache to prevent loops
+        self.forwarded_messages = set()  # Set of recently forwarded message IDs
         
         self.msg_count = 0
         self.poller = None
@@ -175,9 +179,31 @@ class BrokerNode:
         Handle event from another broker.
         
         Updates known_users_global and removes users on LOGOUT events.
+        Also handles forwarded messages from other brokers.
         """
         try:
             event_str = event_bytes.decode('utf-8', errors='ignore')
+            
+            if event_str.startswith("MESSAGE:"):
+                # Handle forwarded message: "MESSAGE:origin_broker:msg_id|original_message"
+                parts = event_str.split("|", 2)
+                if len(parts) >= 2:
+                    header = parts[0]  # "MESSAGE:origin_broker:msg_id"
+                    original_msg = parts[1]
+                    
+                    header_parts = header.split(":")
+                    if len(header_parts) >= 3:
+                        origin_broker = int(header_parts[1])
+                        msg_id = header_parts[2]
+                        
+                        # Prevent loops: don't process messages from this broker or already forwarded
+                        if origin_broker != self.broker_id and msg_id not in self.forwarded_messages:
+                            # Relay the original message to local subscribers
+                            self.backend.send(original_msg.encode('utf-8'))
+                            print(f"[BROKER-{self.broker_id}] Relayed forwarded message {msg_id} from broker {origin_broker}")
+                            return
+            
+            # Handle other events (LOGIN, LOGOUT, HEARTBEAT)
             parts = event_str.split("|", 3)
             
             if len(parts) < 2:
@@ -267,6 +293,64 @@ class BrokerNode:
         except Exception as e:
             return f"ERRO: {str(e)}"
     
+    def _extract_room_from_message(self, parts):
+        """Extract room name from message parts."""
+        try:
+            if len(parts) == 1:
+                # Text/Audio format: "SALA:TIPO:NOME:ID|payload"
+                header = parts[0].decode('utf-8', errors='ignore').split("|")[0]
+                return header.split(":")[0]
+            elif len(parts) == 5:
+                # Video format: [room, sender, msg_id, timestamp, payload]
+                return parts[0].decode('utf-8', errors='ignore')
+        except:
+            pass
+        return None
+    
+    def _get_brokers_with_room_users(self, room):
+        """Return list of broker_ids that have users in the given room."""
+        brokers = set()
+        for username, info in self.known_users_global.items():
+            if info["room"] == room:
+                # Calculate which broker the user should be on
+                user_broker = broker_discovery.get_broker_for_user(username)["broker_id"]
+                brokers.add(user_broker)
+        return list(brokers)
+    
+    def _generate_message_id(self, parts):
+        """Generate unique ID for the message to prevent loops."""
+        msg_bytes = b"".join(parts) if isinstance(parts[0], bytes) else str(parts).encode()
+        return hashlib.md5(msg_bytes).hexdigest()[:8]
+    
+    def _forward_message_to_brokers(self, msg_id, parts):
+        """Forward message to all brokers that have users in the target room."""
+        room = self._extract_room_from_message(parts)
+        if not room:
+            return
+        
+        target_brokers = self._get_brokers_with_room_users(room)
+        
+        for broker_id in target_brokers:
+            if broker_id != self.broker_id and msg_id not in self.forwarded_messages:
+                self._forward_message_to_broker(broker_id, msg_id, parts)
+                self.forwarded_messages.add(msg_id)
+    
+    def _forward_message_to_broker(self, target_broker_id, msg_id, parts):
+        """Forward message to a specific broker via inter-broker PUB."""
+        if not self.is_cluster:
+            return
+        
+        target_broker = broker_discovery.get_broker_by_id(target_broker_id)
+        if not target_broker:
+            return
+        
+        # Format inter-broker message
+        original_msg = b"".join(parts).decode('utf-8', errors='ignore')
+        inter_msg = f"MESSAGE:{self.broker_id}:{msg_id}|{original_msg}"
+        
+        self.broker_pub.send(inter_msg.encode('utf-8'))
+        print(f"[BROKER-{self.broker_id}] Forwarded message {msg_id} to broker {target_broker_id}")
+    
     def _handle_message_from_client(self, parts: list):
         """
         Handle message from client (audio, video, text, heartbeat).
@@ -300,6 +384,10 @@ class BrokerNode:
         except Exception:
             pass
         
+        # Generate message ID and check for cross-broker forwarding
+        msg_id = self._generate_message_id(parts)
+        self._forward_message_to_brokers(msg_id, parts)
+        
         # Relay message to subscribers
         self.backend.send_multipart(parts)
     
@@ -326,6 +414,14 @@ class BrokerNode:
             # Inject system message
             aviso = f"{room}:TEXTO:SISTEMA:0|O usuário '{user}' foi desconectado."
             self.backend.send(aviso.encode('utf-8'))
+    
+    def _cleanup_forwarded_cache(self):
+        """Clean up forwarded messages cache to prevent memory leaks."""
+        # Keep only the most recent 1000 messages
+        if len(self.forwarded_messages) > 1000:
+            # Convert to list, keep last 500, convert back to set
+            recent = list(self.forwarded_messages)[-500:]
+            self.forwarded_messages = set(recent)
     
     def run(self):
         """Main event loop."""
@@ -362,6 +458,9 @@ class BrokerNode:
                 
                 # Cleanup inactive users periodically
                 self._cleanup_inactive_users(current_time)
+                
+                # Cleanup forwarded messages cache
+                self._cleanup_forwarded_cache()
         
         except KeyboardInterrupt:
             print(f"\n[BROKER-{self.broker_id}] Shutting down...")
