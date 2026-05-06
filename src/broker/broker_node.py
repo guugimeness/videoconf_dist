@@ -74,6 +74,7 @@ class BrokerNode:
         self.forwarded_messages = set()  # Set of recently forwarded message IDs
         
         self.msg_count = 0
+        self.relay_print_count = 0
         self.poller = None
         
         print(f"[BROKER-{self.broker_id}] Initializing broker node...")
@@ -189,7 +190,7 @@ class BrokerNode:
                 parts = event_str.split("|", 2)
                 if len(parts) >= 2:
                     header = parts[0]  # "MESSAGE:origin_broker:msg_id"
-                    original_msg = parts[1]
+                    original_msg = "|".join(parts[1:])
                     
                     header_parts = header.split(":")
                     if len(header_parts) >= 3:
@@ -200,7 +201,17 @@ class BrokerNode:
                         if origin_broker != self.broker_id and msg_id not in self.forwarded_messages:
                             # Relay the original message to local subscribers
                             self.backend.send(original_msg.encode('utf-8'))
-                            print(f"[BROKER-{self.broker_id}] Relayed forwarded message {msg_id} from broker {origin_broker}")
+                            
+                            self.relay_print_count += 1
+                            
+                            #print(f"[BROKER-{self.broker_id}] Relayed forwarded message {msg_id} from broker {origin_broker}")
+                            
+                            if self.relay_print_count % 20 == 0:
+                                print(
+                                    f"[BROKER-{self.broker_id}] "
+                                    f"Relayed {self.relay_print_count} messages "
+                                    f"from broker {origin_broker}"
+                                )
                             return
             
             # Handle other events (LOGIN, LOGOUT, HEARTBEAT)
@@ -265,7 +276,8 @@ class BrokerNode:
             
             # Check if user exists globally (in cluster mode)
             if self.is_cluster and usuario in self.known_users_global:
-                return "ERRO: Nome já está em uso (conectado em outro broker)"
+               print(f"[BROKER-{self.broker_id}] Reclaiming global session for {usuario}")
+               self.known_users_global.pop(usuario, None)
             
             # Register user locally
             self.active_users[usuario] = {
@@ -349,6 +361,7 @@ class BrokerNode:
         inter_msg = f"MESSAGE:{self.broker_id}:{msg_id}|{original_msg}"
         
         self.broker_pub.send(inter_msg.encode('utf-8'))
+        
         print(f"[BROKER-{self.broker_id}] Forwarded message {msg_id} to broker {target_broker_id}")
     
     def _handle_message_from_client(self, parts: list):

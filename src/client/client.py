@@ -4,7 +4,7 @@ from shared import config as cfg
 from shared import broker_discovery
 from .client_text import TextClient
 from .client_audio import AudioClient
-from .client_video import VideoClient, ClientConfig
+#from .client_video import VideoClient, ClientConfig
 
 
 def main():
@@ -30,20 +30,20 @@ def main():
     pub_port = broker_config['publish_port']
     sub_port = broker_config['subscribe_port']
     auth_port = broker_config['auth_port']
-    camera_index = getattr(cfg, 'VIDEO_CAMERA_INDEX', 0)
+    #camera_index = getattr(cfg, 'VIDEO_CAMERA_INDEX', 1)
 
     # Instancia os clientes com broker info
     text_client = TextClient(user_name, room, broker_host, pub_port, sub_port, auth_port)
     audio_client = AudioClient(user_name, room, broker_host, pub_port, sub_port, auth_port)
-    video_config = ClientConfig(
-        user_id=user_name,
-        room=room,
-        broker_host=broker_host,
-        video_pub_port=pub_port,
-        video_sub_port=sub_port,
-        camera_index=camera_index
-    )
-    video_client = VideoClient(video_config)
+    #  video_config = ClientConfig(
+    #       user_id=user_name,
+    #       room=room,
+    #       broker_host=broker_host,
+    #       video_pub_port=pub_port,
+    #       video_sub_port=sub_port,
+    #       camera_index=camera_index
+    #   )
+    #  video_client = VideoClient(video_config)
 
     # Autenticação
     if text_client.authenticate():
@@ -52,12 +52,12 @@ def main():
         # Áudio e Vídeo em segundo plano
         audio_thread = threading.Thread(target=audio_client.start, daemon=True)
         audio_thread.start()
-        video_client.start()
+        #video_client.start()
         
         # Texto em primeiro plano
         text_client.start()
         
-        video_client.stop()
+        #video_client.stop()
         
     else:
         print("Encerrando cliente devido a falha no login.")
