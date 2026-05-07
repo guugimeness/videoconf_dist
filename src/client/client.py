@@ -4,7 +4,11 @@ from shared import config as cfg
 from shared import broker_discovery
 from .client_text import TextClient
 from .client_audio import AudioClient
+<<<<<<< HEAD
 from .client_video import VideoClient, ClientConfig
+=======
+#from .client_video import VideoClient, ClientConfig
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
 
 
 def main():
@@ -30,11 +34,16 @@ def main():
     pub_port = broker_config['publish_port']
     sub_port = broker_config['subscribe_port']
     auth_port = broker_config['auth_port']
+<<<<<<< HEAD
     camera_index = getattr(cfg, 'VIDEO_CAMERA_INDEX', 0)
+=======
+    #camera_index = getattr(cfg, 'VIDEO_CAMERA_INDEX', 1)
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
 
     # Instancia os clientes com broker info
     text_client = TextClient(user_name, room, broker_host, pub_port, sub_port, auth_port)
     audio_client = AudioClient(user_name, room, broker_host, pub_port, sub_port, auth_port)
+<<<<<<< HEAD
     video_config = ClientConfig(
         user_id=user_name,
         room=room,
@@ -44,6 +53,17 @@ def main():
         camera_index=camera_index
     )
     video_client = VideoClient(video_config)
+=======
+    #  video_config = ClientConfig(
+    #       user_id=user_name,
+    #       room=room,
+    #       broker_host=broker_host,
+    #       video_pub_port=pub_port,
+    #       video_sub_port=sub_port,
+    #       camera_index=camera_index
+    #   )
+    #  video_client = VideoClient(video_config)
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
 
     # Autenticação
     if text_client.authenticate():
@@ -52,12 +72,20 @@ def main():
         # Áudio e Vídeo em segundo plano
         audio_thread = threading.Thread(target=audio_client.start, daemon=True)
         audio_thread.start()
+<<<<<<< HEAD
         video_client.start()
+=======
+        #video_client.start()
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
         
         # Texto em primeiro plano
         text_client.start()
         
+<<<<<<< HEAD
         video_client.stop()
+=======
+        #video_client.stop()
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
         
     else:
         print("Encerrando cliente devido a falha no login.")

@@ -1,5 +1,6 @@
 # Ferramenta de Videoconferência
 
+<<<<<<< HEAD
 Sistema de videoconferência assíncrona com **descoberta dinâmica de serviços**.
 
 ## 🚀 Novos Recursos
@@ -9,6 +10,9 @@ Sistema de videoconferência assíncrona com **descoberta dinâmica de serviços
 - ✅ **Broadcast UDP**: Descoberta automática na rede local
 - ✅ **Tolerância a Falhas**: Detecção automática de brokers inativos
 - ✅ **Modo Híbrido**: Combina registry + UDP para máxima confiabilidade
+=======
+Sistema de videoconferência assíncrona.
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
 
 ### Build da Imagem
 
@@ -16,6 +20,7 @@ Sistema de videoconferência assíncrona com **descoberta dinâmica de serviços
 docker build -t videoconf .
 ```
 
+<<<<<<< HEAD
 ### Iniciar o Sistema
 
 Inicie o registry e os brokers manualmente conforme descrito abaixo.
@@ -34,6 +39,13 @@ PYTHONPATH=src python3 src/broker/broker_node.py --broker-id 0
 
 # Terminal 2
 PYTHONPATH=src python3 src/broker/broker_node.py --broker-id 1
+=======
+### Iniciar o Broker
+
+```bash
+# Terminal 1: Broker
+docker-compose up broker
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
 ```
 
 ### Iniciar Clientes
@@ -41,6 +53,7 @@ PYTHONPATH=src python3 src/broker/broker_node.py --broker-id 1
 Em terminais diferentes:
 
 ```bash
+<<<<<<< HEAD
 # Usuário 1 (conecta automaticamente ao broker correto)
 PYTHONPATH=src python3 src/client/client.py user1 SALA_A
 
@@ -67,3 +80,20 @@ PYTHONPATH=src python3 src/client/client.py user2 SALA_A
 | 6. Identidade e Sessão | ✅ Completo | Registry global |
 
 **Sistema pronto para produção com descoberta dinâmica! 🎉**
+=======
+# Terminal 2: Usuário 1
+cd src
+python -m client.client user1 SALA_A
+
+# Terminal 3: Usuário 2
+cd src
+python -m client.client user2 SALA_A
+```
+
+### Fechar o Broker
+
+```bash
+# Terminal 1: Broker
+docker-compose down
+```
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8

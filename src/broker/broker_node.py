@@ -29,7 +29,10 @@ import argparse
 import sys
 import json
 import hashlib
+<<<<<<< HEAD
 import threading
+=======
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
 from pathlib import Path
 
 # Add parent directory to path for imports
@@ -75,6 +78,7 @@ class BrokerNode:
         self.forwarded_messages = set()  # Set of recently forwarded message IDs
         
         self.msg_count = 0
+<<<<<<< HEAD
         self.poller = None
         
         # Dynamic discovery
@@ -91,6 +95,16 @@ class BrokerNode:
         
         self._setup_sockets()
         self._setup_dynamic_discovery()
+=======
+        self.relay_print_count = 0
+        self.poller = None
+        
+        print(f"[BROKER-{self.broker_id}] Initializing broker node...")
+        print(f"[BROKER-{self.broker_id}] Cluster mode: {self.is_cluster}")
+        print(f"[BROKER-{self.broker_id}] Total brokers: {self.num_brokers}")
+        
+        self._setup_sockets()
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
     
     def _setup_sockets(self):
         """Setup all ZeroMQ sockets."""
@@ -148,6 +162,7 @@ class BrokerNode:
         if self.is_cluster:
             self.poller.register(self.broker_sub, zmq.POLLIN)
     
+<<<<<<< HEAD
     def _setup_dynamic_discovery(self):
         """Setup dynamic service discovery."""
         if not self._discovery_enabled:
@@ -200,6 +215,8 @@ class BrokerNode:
         self._heartbeat_thread.start()
         print(f"[BROKER-{self.broker_id}] ✓ Heartbeat thread started")
     
+=======
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
     def _broadcast_login_event(self, username: str, room: str):
         """
         Broadcast login event to all brokers.
@@ -251,7 +268,11 @@ class BrokerNode:
                 parts = event_str.split("|", 2)
                 if len(parts) >= 2:
                     header = parts[0]  # "MESSAGE:origin_broker:msg_id"
+<<<<<<< HEAD
                     original_msg = parts[1]
+=======
+                    original_msg = "|".join(parts[1:])
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
                     
                     header_parts = header.split(":")
                     if len(header_parts) >= 3:
@@ -262,7 +283,21 @@ class BrokerNode:
                         if origin_broker != self.broker_id and msg_id not in self.forwarded_messages:
                             # Relay the original message to local subscribers
                             self.backend.send(original_msg.encode('utf-8'))
+<<<<<<< HEAD
                             print(f"[BROKER-{self.broker_id}] Relayed forwarded message {msg_id} from broker {origin_broker}")
+=======
+                            
+                            self.relay_print_count += 1
+                            
+                            #print(f"[BROKER-{self.broker_id}] Relayed forwarded message {msg_id} from broker {origin_broker}")
+                            
+                            if self.relay_print_count % 20 == 0:
+                                print(
+                                    f"[BROKER-{self.broker_id}] "
+                                    f"Relayed {self.relay_print_count} messages "
+                                    f"from broker {origin_broker}"
+                                )
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
                             return
             
             # Handle other events (LOGIN, LOGOUT, HEARTBEAT)
@@ -327,7 +362,12 @@ class BrokerNode:
             
             # Check if user exists globally (in cluster mode)
             if self.is_cluster and usuario in self.known_users_global:
+<<<<<<< HEAD
                 return "ERRO: Nome já está em uso (conectado em outro broker)"
+=======
+               print(f"[BROKER-{self.broker_id}] Reclaiming global session for {usuario}")
+               self.known_users_global.pop(usuario, None)
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
             
             # Register user locally
             self.active_users[usuario] = {
@@ -411,6 +451,10 @@ class BrokerNode:
         inter_msg = f"MESSAGE:{self.broker_id}:{msg_id}|{original_msg}"
         
         self.broker_pub.send(inter_msg.encode('utf-8'))
+<<<<<<< HEAD
+=======
+        
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
         print(f"[BROKER-{self.broker_id}] Forwarded message {msg_id} to broker {target_broker_id}")
     
     def _handle_message_from_client(self, parts: list):
@@ -532,6 +576,7 @@ class BrokerNode:
     
     def _cleanup(self):
         """Close all sockets and context."""
+<<<<<<< HEAD
         print(f"[BROKER-{self.broker_id}] Cleaning up...")
         
         # Stop dynamic discovery
@@ -553,6 +598,8 @@ class BrokerNode:
             self._heartbeat_thread.join(timeout=2)
         
         # Close sockets
+=======
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
         self.frontend.close()
         self.backend.close()
         self.auth_socket.close()

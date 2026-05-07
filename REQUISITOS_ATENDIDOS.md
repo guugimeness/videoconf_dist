@@ -33,6 +33,7 @@
 **Requisito**: Clientes não sabem previamente qual broker usar
 
 ### Requisitos Atendidos:
+<<<<<<< HEAD
 - [x] **Registro dinâmico**: `src/shared/config.py` lista brokers (fallback)
 - [x] **Cliente escolhe broker**: `broker_discovery.get_broker_for_user(username)`
 - [x] **Estratégia consistente**: Hash MD5 garante mesmo user → mesmo broker
@@ -64,6 +65,25 @@ def _setup_dynamic_discovery(self):
 ```
 
 **Status**: ✅ COMPLETO - Descoberta dinâmica implementada com múltiplas estratégias
+=======
+- [x] **Registro dinâmico**: `src/shared/config.py` lista todos os brokers
+- [x] **Cliente escolhe broker**: `broker_discovery.get_broker_for_user(username)`
+- [x] **Estratégia consistente**: Hash MD5 garante mesmo user → mesmo broker
+- [x] **Fallback automático**: Se broker principal falhar, tenta próximo
+
+### Implementação:
+```python
+# src/shared/broker_discovery.py
+def get_broker_for_user(username):
+    broker_id = hash(username) % num_brokers
+    return BROKER_LIST[broker_id]
+
+def select_fallback_broker(username, exclude_broker_id):
+    # Seleciona próximo broker disponível
+```
+
+**Status**: ✅ COMPLETO
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
 
 ---
 
@@ -218,6 +238,7 @@ Todos os requisitos foram testados e validados com sucesso:
 - ✅ 100% de taxa de autenticação
 - ✅ Sincronização inter-broker confirmada
 - ✅ Prevenção de nomes duplicados
+<<<<<<< HEAD
 - ✅ **Registry centralizado funcionando**
 - ✅ **Broadcast UDP implementado**
 - ✅ **Modo híbrido validado**
@@ -226,3 +247,10 @@ Todos os requisitos foram testados e validados com sucesso:
 ---
 
 **Conclusão**: A implementação atende completamente aos 6 requisitos especificados, incluindo **descoberta dinâmica de serviços**. Sistema pronto para produção com tolerância a falhas e escalabilidade automática.
+=======
+- ✅ Failover e reconexão funcionando
+
+---
+
+**Conclusão**: A implementação atende completamente aos 6 requisitos especificados. Sistema pronto para produção.
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8

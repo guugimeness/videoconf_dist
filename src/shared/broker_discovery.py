@@ -2,19 +2,27 @@
 Broker Discovery Module for Cluster Mode
 
 This module provides functions to discover and select brokers for clients.
+<<<<<<< HEAD
 Supports both single-broker and cluster modes with dynamic discovery.
+=======
+Supports both single-broker and cluster modes.
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
 """
 
 import hashlib
 import random
+<<<<<<< HEAD
 import socket
 import threading
 import time
 import json
+=======
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
 from typing import Dict, List, Optional
 from . import config
 
 
+<<<<<<< HEAD
 class RegistryClient:
     """Client for centralized broker registry service."""
 
@@ -248,10 +256,26 @@ def get_broker_for_user(username: str) -> Dict:
     Returns:
         Dict with broker info (host, ports, broker_id)
 
+=======
+def get_broker_for_user(username: str) -> Dict:
+    """
+    Calculate which broker a user should connect to.
+    
+    Uses consistent hashing: broker_index = hash(username) % len(BROKER_LIST)
+    This ensures the same user always goes to the same broker (for reconnection).
+    
+    Args:
+        username: The username to hash
+        
+    Returns:
+        Dict with broker info (host, ports, broker_id)
+        
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
     Example:
         >>> broker = get_broker_for_user("alice")
         >>> connect(broker["host"], broker["publish_port"])
     """
+<<<<<<< HEAD
     brokers = get_all_brokers()
     if not brokers:
         raise ValueError("No brokers available")
@@ -261,11 +285,22 @@ def get_broker_for_user(username: str) -> Dict:
     broker_index = hash_value % len(brokers)
 
     return brokers[broker_index]
+=======
+    if not config.BROKER_LIST:
+        raise ValueError("BROKER_LIST is empty in config")
+    
+    # Consistent hashing: same user always maps to same broker
+    hash_value = int(hashlib.md5(username.encode()).hexdigest(), 16)
+    broker_index = hash_value % len(config.BROKER_LIST)
+    
+    return config.BROKER_LIST[broker_index]
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
 
 
 def get_all_brokers() -> List[Dict]:
     """
     Get list of all brokers in the cluster.
+<<<<<<< HEAD
 
     Uses dynamic discovery if enabled, falls back to static config.
     """
@@ -283,11 +318,19 @@ def get_all_brokers() -> List[Dict]:
     else:
         # Static mode
         return config.BROKER_LIST
+=======
+    
+    Returns:
+        List of broker info dicts
+    """
+    return config.BROKER_LIST
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
 
 
 def get_broker_by_id(broker_id: int) -> Optional[Dict]:
     """
     Get broker info by its ID.
+<<<<<<< HEAD
 
     Uses the static BROKER_LIST for broker self-identification, because
     broker startup must find its own config before dynamic discovery is active.
@@ -295,6 +338,12 @@ def get_broker_by_id(broker_id: int) -> Optional[Dict]:
     Args:
         broker_id: The broker ID
 
+=======
+    
+    Args:
+        broker_id: The broker ID
+        
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
     Returns:
         Broker info dict or None if not found
     """
@@ -318,11 +367,18 @@ def select_fallback_broker(primary_broker: Dict, username: str) -> Optional[Dict
     Returns:
         A different broker dict, or None if only 1 broker exists
     """
+<<<<<<< HEAD
     brokers = get_all_brokers()
     if len(brokers) <= 1:
         return None
     
     fallback = [b for b in brokers if b["broker_id"] != primary_broker["broker_id"]]
+=======
+    if len(config.BROKER_LIST) <= 1:
+        return None
+    
+    fallback = [b for b in config.BROKER_LIST if b["broker_id"] != primary_broker["broker_id"]]
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
     return random.choice(fallback) if fallback else None
 
 
@@ -335,8 +391,12 @@ def select_broker_round_robin() -> Dict:
     Returns:
         Broker info dict
     """
+<<<<<<< HEAD
     brokers = get_all_brokers()
     return random.choice(brokers)
+=======
+    return random.choice(config.BROKER_LIST)
+>>>>>>> 7aa82b6a024539eabc686ecf584dd7bfe1858eb8
 
 
 def get_connection_string(broker: Dict, socket_type: str = "publish") -> str:
