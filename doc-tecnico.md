@@ -43,10 +43,6 @@ Os brokers comunicam-se através de canais **ZeroMQ** dedicados para sincroniza�
 
 ### Modelo Geral
 
-<p align="center">
-  <img src="https://github.com/guugimeness/videoconf_dist/blob/32fef5fd9db93aa47488a51565865f440d3f70c3/docs/diagrama-arquitetura.jpeg" alt="Image">
-</p>
-
 O sistema utiliza uma arquitetura distribuída baseada em múltiplos brokers independentes e cooperativos. Cada broker é responsável por gerenciar um subconjunto de clientes, incluindo autenticação, distribuição de mensagens e controle de sessão.
 
 Os brokers comunicam-se entre si através de canais ZeroMQ dedicados para sincronização de usuários, encaminhamento de mensagens e monitoramento de presença global.
